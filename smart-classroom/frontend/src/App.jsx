@@ -137,7 +137,7 @@ function App() {
   const finalizeDay = async () => {
     try {
       const res = await axios.post(`${API_URL}/teacher/finalize`);
-      showNotification(`Day finalized for ${res.data.finalized_employees.length} employees`);
+      showNotification(`Day finalized for ${res.data.finalized_employees.length} residents`);
       fetchSystemStatus();
     } catch (e) {
       showNotification("Finalization failed", "error");
@@ -156,7 +156,7 @@ function App() {
 
   const connectWebSocket = () => {
     ws.current = new WebSocket(WS_URL);
-    ws.current.onopen = () => console.log("Connected to CSTPE Dashboard WS");
+    ws.current.onopen = () => console.log("Connected to Dashboard");
     ws.current.onmessage = (event) => {
       try {
         const message = JSON.parse(event.data);
@@ -164,7 +164,7 @@ function App() {
           setDashboardStats(message.data);
           if (message.environment) setEnvData({ valid: true, readings: message.environment });
         }
-      } catch (e) { console.error("WS error", e); }
+      } catch (e) { console.error("error", e); }
     };
     ws.current.onclose = () => setTimeout(connectWebSocket, 3000);
   };
@@ -211,7 +211,7 @@ function App() {
   const enrollNewEmployee = async (e) => {
     e.preventDefault();
     if (!newEmployeeName.trim()) {
-      showNotification("Please enter a employee name.", "error");
+      showNotification("Please enter name.", "error");
       return;
     }
     const image = getBase64Frame();
@@ -277,24 +277,24 @@ function App() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M14.25 9.75L16.5 12l-2.25 2.25m-4.5 0L7.5 12l2.25-2.25M6 20.25h12A2.25 2.25 0 0020.25 18V6A2.25 2.25 0 0018 3.75H6A2.25 2.25 0 003.75 6v12A2.25 2.25 0 006 20.25z" />
               </svg>
             </div>
-            <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">CSTPE Engine</h2>
-            <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">University Management System</p>
+            <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white"></h2>
+            <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">Society Management System</p>
           </div>
 
           <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
             <div className="px-8 pt-8 pb-6 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
-              <h3 className="text-lg font-semibold text-slate-900 dark:text-white text-center">Faculty Authentication</h3>
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-white text-center">Resident Authentication</h3>
             </div>
             <div className="px-8 py-8">
               <form onSubmit={handleLogin} className="space-y-6">
                 <div>
-                  <label className="block text-sm font-medium leading-6 text-slate-900 dark:text-slate-200">MAHE Authorized ID</label>
+                  <label className="block text-sm font-medium leading-6 text-slate-900 dark:text-slate-200">Authorized ID</label>
                   <div className="mt-2 relative rounded-md shadow-sm">
                     <input
                       type="text"
                       required
                       className="block w-full rounded-md border-0 py-2.5 px-3 text-slate-900 dark:text-white bg-white dark:bg-slate-900 ring-1 ring-inset ring-slate-300 dark:ring-slate-700 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6 transition-colors"
-                      placeholder="e.g. MAHE-2026"
+                      placeholder="e.g. UNITY-2026"
                       value={maheId}
                       onChange={(e) => setMaheId(e.target.value)}
                     />
@@ -342,11 +342,10 @@ function App() {
   const tabs = [
     { id: "dashboard", name: "Dashboard" },
     { id: "camera", name: "Live Camera" },
-    { id: "employees", name: "Employee Lookup" },
+    { id: "employees", name: "Resident Lookup" },
     { id: "enrollment", name: "Enrollment" },
     { id: "audit", name: "Audit Trail" },
     { id: "environment", name: "Telemetry" },
-    { id: "system", name: "Attestation" },
   ];
 
   return (
@@ -388,8 +387,8 @@ function App() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M14.25 9.75L16.5 12l-2.25 2.25m-4.5 0L7.5 12l2.25-2.25M6 20.25h12A2.25 2.25 0 0020.25 18V6A2.25 2.25 0 0018 3.75H6A2.25 2.25 0 003.75 6v12A2.25 2.25 0 006 20.25z" />
                 </svg>
                 <div className="ml-3 hidden sm:block">
-                  <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white leading-tight">CSTPE</h1>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 font-medium tracking-wide uppercase">University System</p>
+                  <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white leading-tight"></h1>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-medium tracking-wide uppercase">UNITY System</p>
                 </div>
               </div>
               <div className="ml-4 sm:ml-10 flex space-x-4 sm:space-x-8 overflow-x-auto no-scrollbar">
@@ -429,7 +428,7 @@ function App() {
                   <div className="h-6 w-6 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center">
                     <span className="text-xs font-bold text-slate-500 dark:text-slate-400">M</span>
                   </div>
-                  <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{maheId || "Faculty"}</span>
+                  <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{maheId || "Resident"}</span>
                 </div>
                 <button onClick={() => setIsLoggedIn(false)} className="text-xs font-medium text-slate-500 hover:text-red-500 dark:text-slate-400 dark:hover:text-red-400">Logout</button>
               </div>
