@@ -23,7 +23,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first to leverage Docker cache
-COPY smart-classroom/backend/requirements.txt .
+COPY requirements.txt .
 
 # Limit C++ compilation concurrency to prevent OOM crashes during build
 ENV CMAKE_BUILD_PARALLEL_LEVEL=1
@@ -37,7 +37,7 @@ RUN pip uninstall -y opencv-python opencv-python-headless opencv-contrib-python 
     && pip install --no-cache-dir opencv-python-headless
 
 # Copy backend source code
-COPY smart-classroom/backend/ .
+COPY . .
 
 # Expose the port FastAPI runs on
 EXPOSE 8000
