@@ -5,7 +5,7 @@ sqlalchemy
 
 numpy
 pandas
-opencv-python
+opencv-python-headless
 dlib
 face-recognition
 
