@@ -498,7 +498,7 @@ function App() {
                 <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
                   <thead className="bg-slate-50 dark:bg-slate-800/50">
                     <tr>
-                      {["Employee", "Active Time", "Progress", "Status", "Session UUID", "Dyn Gap", "Bio Score", "Env"].map((h) => (
+                      {["Resident", "Active Time", "Progress", "Status", "Session UUID", "Dyn Gap", "Bio Score", "Env"].map((h) => (
                         <th key={h} className="px-6 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{h}</th>
                       ))}
                     </tr>
@@ -554,8 +554,8 @@ function App() {
           <div className="max-w-3xl mx-auto">
             <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden transition-colors">
               <div className="px-4 py-5 border-b border-slate-200 dark:border-slate-700 sm:px-6 bg-slate-50 dark:bg-slate-800/50">
-                <h3 className="text-base font-semibold leading-6 text-slate-900 dark:text-white">Secure Employee Registration</h3>
-                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Enroll new employees directly into the encrypted biometric database.</p>
+                <h3 className="text-base font-semibold leading-6 text-slate-900 dark:text-white">Secure Resident Registration</h3>
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Enroll new residents/non-residents directly into the encrypted biometric database.</p>
               </div>
               <div className="p-6">
                 <form onSubmit={enrollNewEmployee} className="space-y-6">
@@ -588,7 +588,7 @@ function App() {
                         <div className="w-48 h-64 border-2 border-dashed border-emerald-500 rounded-full opacity-50"></div>
                       </div>
                     </div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 text-center">Ensure the employee's face is clearly visible inside the guide.</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 text-center">Ensure the person's face is clearly visible inside the guide.</p>
                   </div>
 
                   <div className="pt-2 flex justify-end">
@@ -597,7 +597,7 @@ function App() {
                       disabled={isEnrolling}
                       className="inline-flex items-center rounded-md bg-indigo-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 transition-all disabled:opacity-50"
                     >
-                      {isEnrolling ? "Processing Deep Learning Registration..." : "Extract Face & Enroll Employee"}
+                      {isEnrolling ? "Processing Deep Learning Registration..." : "Extract Face & Enroll Resident/Non-Resident"}
                     </button>
                   </div>
                 </form>
@@ -657,18 +657,18 @@ function App() {
         )}
 
         {/* ===== STUDENTS TAB ===== */}
-        {activeTab === "employees" && (
+        {activeTab === "residents" && (
           <div className="space-y-6">
             <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden transition-colors">
               <div className="px-4 py-5 border-b border-slate-200 dark:border-slate-700 sm:px-6">
-                <h3 className="text-base font-semibold leading-6 text-slate-900 dark:text-white">Employee Profiles &amp; Analytics</h3>
+                <h3 className="text-base font-semibold leading-6 text-slate-900 dark:text-white">Resident Profiles &amp; Analytics</h3>
               </div>
               <div className="p-6 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
                 <div className="max-w-xl flex rounded-md shadow-sm">
                   <input
                     type="text"
                     className="block w-full rounded-none rounded-l-md border-0 py-2.5 px-3 text-slate-900 dark:text-white ring-1 ring-inset ring-slate-300 dark:ring-slate-700 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6 bg-white dark:bg-slate-900"
-                    placeholder="Search employee globally by name (e.g. Alice)..."
+                    placeholder="Search resident/non-resident globally by name (e.g. Alice)..."
                     value={employeeSearch}
                     onChange={(e) => setEmployeeSearch(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && searchEmployee()}
@@ -685,10 +685,10 @@ function App() {
 
               {employeeProfile && (
                 <div className="p-6">
-                  {/* Employee Summary Cards */}
+                  {/* Resident Summary Cards */}
                   <dl className="mt-2 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">
                     <div className="overflow-hidden rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-sm px-4 py-5 sm:p-6 transition-colors">
-                      <dt className="truncate text-sm font-medium text-slate-500 dark:text-slate-400">Employee Identity</dt>
+                      <dt className="truncate text-sm font-medium text-slate-500 dark:text-slate-400">Resident/Non-Resident Identity</dt>
                       <dd className="mt-2 text-3xl font-semibold tracking-tight text-slate-900 dark:text-white">{employeeProfile.employee_name}</dd>
                     </div>
                     <div className="overflow-hidden rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-sm px-4 py-5 sm:p-6 transition-colors">
@@ -714,7 +714,7 @@ function App() {
                     </div>
                   </dl>
 
-                  {/* Employee History Table */}
+                  {/* Resident/Non-Resident History Table */}
                   {employeeProfile.history && employeeProfile.history.length > 0 && (
                     <div className="ring-1 ring-slate-200 dark:ring-slate-700 rounded-lg overflow-hidden transition-colors">
                       <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
