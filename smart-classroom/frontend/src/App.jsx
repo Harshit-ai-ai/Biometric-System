@@ -11,7 +11,7 @@ const API_KEY =
 axios.defaults.headers.common["X-API-Key"] = API_KEY;
 
 function getApiUrl() {
-  return (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(
+  return (import.meta.env.VITE_API_URL || "http://localhost:10000").replace(
     /\/+$/,
     ""
   );
@@ -31,7 +31,7 @@ function getWsUrl(apiUrl) {
     url.search = "";
     return url.toString().replace(/\/+$/, "");
   } catch {
-    return "ws://localhost:8000/ws/dashboard";
+    return "ws://localhost:10000/ws/dashboard";
   }
 }
 
