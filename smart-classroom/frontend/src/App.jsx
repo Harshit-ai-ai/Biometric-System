@@ -67,11 +67,11 @@ function App() {
 
   const handleLogin = (e) => {
     e.preventDefault();
-    if (maheId.toUpperCase().startsWith("MAHE") && password.length > 3) {
+    if (maheId.toUpperCase().startsWith("UNITY") && password.length > 3) {
       setIsLoggedIn(true);
-      showNotification("Authentication successful. Welcome to CSTPE.");
+      showNotification("Authentication successful. Welcome to UNITY.");
     } else {
-      showNotification("Unauthorized. Valid MAHE ID required.", "error");
+      showNotification("Unauthorized. Valid UNITY ID required.", "error");
     }
   };
 
@@ -130,7 +130,7 @@ function App() {
       const res = await axios.get(`${API_URL}/employee/${employeeSearch.trim()}`);
       setEmployeeProfile(res.data);
     } catch (e) {
-      showNotification("Employee not found", "error");
+      showNotification("Resident not found", "error");
     }
   };
 
