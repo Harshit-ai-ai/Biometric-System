@@ -31,7 +31,7 @@ function getWsUrl(apiUrl) {
     url.search = "";
     return url.toString().replace(/\/+$/, "");
   } catch {
-    return "ws://localhost:10000/ws/dashboard";
+    return "wss://biometric-system-production.up.railway.app/ws/dashboard";
   }
 }
 
