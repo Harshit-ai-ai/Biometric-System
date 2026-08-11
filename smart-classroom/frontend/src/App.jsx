@@ -6,12 +6,12 @@ import axios from "axios";
 // ============================================================
 
 const API_KEY =
-  import.meta.env.VITE_API_KEY || "cstpe-mahe-2026-secure";
+  import.meta.env.VITE_API_KEY || "unity-2026-secure";
 
 axios.defaults.headers.common["X-API-Key"] = API_KEY;
 
 function getApiUrl() {
-  return (import.meta.env.VITE_API_URL || "http://localhost:10000").replace(
+  return (import.meta.env.VITE_API_URL || "https://biometric-system-production.up.railway.app").replace(
     /\/+$/,
     ""
   );
