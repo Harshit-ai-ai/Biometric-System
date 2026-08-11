@@ -109,7 +109,7 @@ function App() {
       if (zkRes) setZkStatus(zkRes.data);
       if (fedRes) setFedStatus(fedRes.data);
       if (attRes) setAttestation(attRes.data);
-      if (summRes) setAssigned AreaSummary(summRes.data);
+      if (summRes) setAssignedAreaSummary(summRes.data);
     } catch (e) {
       console.error("Status fetch error", e);
     }
