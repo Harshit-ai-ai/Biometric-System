@@ -1,107 +1,81 @@
-"""
-CSTPE Embedding Store (Feature 10 - Part 1)
-SQLite-backed storage of recent face embeddings per student.
-Used by the Session Recovery module to re-link detections after gap events.
-"""
-
-import sqlite3
-import numpy as np
-import json
+import pickle
 import os
+import face_recognition
+import numpy as np
+import datetime
 
-DATA_DIR = os.getenv("DATA_DIR", "data")
-os.makedirs(DATA_DIR, exist_ok=True)
-DB_FILE = os.path.join(DATA_DIR, "attendance.db")
+ENCODINGS_FILE = "encodings.pkl"
+ATTENDANCE_FILE = "attendance_log.pkl"
 
+def load_encodings():
+    if not os.path.exists(ENCODINGS_FILE):
+        return {}
+    with open(ENCODINGS_FILE, "rb") as f:
+        try:
+            return pickle.load(f)
+        except:
+            return {}
 
-def init_embedding_table():
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS embedding_store (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            student_name TEXT NOT NULL,
-            embedding TEXT NOT NULL,
-            timestamp TEXT NOT NULL
-        )
-    """)
-    conn.commit()
-    conn.close()
+def save_encoding(name: str, encoding: np.ndarray):
+    encodings = load_encodings()
+    encodings[name] = encoding
+    with open(ENCODINGS_FILE, "wb") as f:
+        pickle.dump(encodings, f)
 
+def get_face_encoding(image_array: np.ndarray):
+    encodings = face_recognition.face_encodings(image_array)
+    if encodings:
+        return encodings[0]
+    return None
 
-init_embedding_table()
+def match_face(image_array: np.ndarray):
+    encodings = load_encodings()
+    if not encodings:
+        return None
+        
+    known_names = list(encodings.keys())
+    known_encs = list(encodings.values())
+    
+    face_enc = get_face_encoding(image_array)
+    if face_enc is None:
+        return None
+        
+    matches = face_recognition.compare_faces(known_encs, face_enc, tolerance=0.6)
+    if True in matches:
+        first_match_index = matches.index(True)
+        return known_names[first_match_index]
+    return None
 
+def log_attendance(name: str):
+    log = []
+    if os.path.exists(ATTENDANCE_FILE):
+        with open(ATTENDANCE_FILE, "rb") as f:
+            try:
+                log = pickle.load(f)
+            except:
+                pass
+    log.append({"name": name, "timestamp": datetime.datetime.now().isoformat()})
+    with open(ATTENDANCE_FILE, "wb") as f:
+        pickle.dump(log, f)
 
-def store_embedding(student_name, embedding, timestamp_str):
-    """
-    Store a face embedding for a student (keep last N per student).
-    """
-    from policy_engine import policy
-    max_embeddings = policy.get_int("max_stored_embeddings", 5)
-
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-
-    # Serialize the embedding as a JSON list of floats
-    emb_json = json.dumps(embedding.tolist())
-
-    cursor.execute(
-        "INSERT INTO embedding_store (student_name, embedding, timestamp) VALUES (?, ?, ?)",
-        (student_name, emb_json, timestamp_str),
-    )
-
-    # Trim old embeddings beyond the max
-    cursor.execute("""
-        DELETE FROM embedding_store
-        WHERE id NOT IN (
-            SELECT id FROM embedding_store
-            WHERE student_name = ?
-            ORDER BY id DESC
-            LIMIT ?
-        ) AND student_name = ?
-    """, (student_name, max_embeddings, student_name))
-
-    conn.commit()
-    conn.close()
-
-
-def get_recent_embeddings(student_name, limit=5):
-    """
-    Retrieve the most recent face embeddings for a student.
-    Returns a list of numpy arrays.
-    """
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-
-    cursor.execute(
-        "SELECT embedding FROM embedding_store WHERE student_name = ? ORDER BY id DESC LIMIT ?",
-        (student_name, limit),
-    )
-    rows = cursor.fetchall()
-    conn.close()
-
-    embeddings = []
-    for row in rows:
-        arr = np.array(json.loads(row[0]))
-        embeddings.append(arr)
-
-    return embeddings
-
-
-def get_all_recent_embeddings(limit_per_student=5):
-    """
-    Retrieve all students' recent embeddings.
-    Returns {student_name: [embedding1, embedding2, ...]}.
-    """
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT DISTINCT student_name FROM embedding_store")
-    students = [row[0] for row in cursor.fetchall()]
-    conn.close()
-
-    result = {}
-    for name in students:
-        result[name] = get_recent_embeddings(name, limit_per_student)
-
-    return result
+def get_recent_attendance(hours: int):
+    if not os.path.exists(ATTENDANCE_FILE):
+        return []
+    with open(ATTENDANCE_FILE, "rb") as f:
+        try:
+            log = pickle.load(f)
+        except:
+            return []
+    
+    now = datetime.datetime.now()
+    cutoff = now - datetime.timedelta(hours=hours)
+    
+    filtered_log = []
+    for entry in log:
+        try:
+            dt = datetime.datetime.fromisoformat(entry["timestamp"])
+            if dt >= cutoff:
+                filtered_log.append(entry)
+        except:
+            continue
+    return filtered_log

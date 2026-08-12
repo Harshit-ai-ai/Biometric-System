@@ -16,6 +16,13 @@ from authorization.engine import authorization_engine
 from integration.dwaar_client import dwaar_client
 from analytics.movement import anomaly_engine
 
+from fastapi import WebSocket, WebSocketDisconnect
+from fastapi.responses import StreamingResponse
+import io
+import csv
+import embedding_store
+
+
 # --- API Security Layer ---
 API_KEY_NAME = "X-API-Key"
 API_KEY = os.getenv("API_KEY", "amaryllis-secure-token")
@@ -34,9 +41,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://biometric-system-rho.vercel.app/"
-    ],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -51,6 +56,13 @@ def startup_event():
 class AccessRequest(BaseModel):
     terminal_id: str
     image_base64: str
+
+class EnrollRequest(BaseModel):
+    employee_name: str
+    image: str
+
+class AttendanceRequest(BaseModel):
+    image: str
 
 # --- Helper Functions ---
 def decode_image(b64_str: str) -> np.ndarray:
@@ -155,8 +167,71 @@ def process_scan(req: AccessRequest, db = Depends(get_db)):
     }
 
 @app.post("/admin/enroll", dependencies=[Depends(get_api_key)])
-def enroll_person(req: Request):
+def admin_enroll_person(req: Request):
     return {"status": "Enrolled (Mock)"}
+
+@app.post("/enroll")
+def enroll(req: EnrollRequest):
+    frame = decode_image(req.image)
+    face_enc = embedding_store.get_face_encoding(frame)
+    if face_enc is None:
+        return {"status": "error", "message": "No face found in image."}
+    
+    embedding_store.save_encoding(req.employee_name, face_enc)
+    return {"status": "success", "message": f"{req.employee_name} enrolled successfully."}
+
+dashboard_clients = []
+
+@app.websocket("/ws/dashboard")
+async def websocket_dashboard(websocket: WebSocket):
+    await websocket.accept()
+    dashboard_clients.append(websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        dashboard_clients.remove(websocket)
+
+import asyncio
+
+@app.post("/attendance")
+async def process_attendance(req: AttendanceRequest):
+    frame = decode_image(req.image)
+    matched_name = embedding_store.match_face(frame)
+    
+    if matched_name:
+        embedding_store.log_attendance(matched_name)
+        # Notify dashboard
+        event_data = {
+            "type": "update",
+            "data": [{
+                "id": "1", 
+                "name": matched_name, 
+                "time": datetime.utcnow().strftime("%H:%M:%S"),
+                "status": "Recognized"
+            }]
+        }
+        for client in dashboard_clients:
+            try:
+                await client.send_json(event_data)
+            except:
+                pass
+        return {"status": "success", "matched": matched_name}
+    return {"status": "unrecognized"}
+
+@app.get("/export")
+def export_csv(hours: int = 24):
+    log = embedding_store.get_recent_attendance(hours)
+    
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Name", "Timestamp"])
+    for entry in log:
+        writer.writerow([entry["name"], entry["timestamp"]])
+        
+    response = StreamingResponse(iter([output.getvalue()]), media_type="text/csv")
+    response.headers["Content-Disposition"] = f"attachment; filename=attendance_export_{hours}h.csv"
+    return response
 
 if __name__ == "__main__":
     import uvicorn

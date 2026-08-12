@@ -89,6 +89,7 @@ function App() {
   const [notification, setNotification] = useState(null);
   const [isDark, setIsDark] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [exportHours, setExportHours] = useState(24);
 
   // ==========================================================
   // ENROLLMENT STATE
@@ -1631,6 +1632,31 @@ function App() {
                   <strong>Note:</strong> If the Edge CCTV
                   Gateway is running remotely, you do not need to
                   initialize local tracking.
+                </div>
+                
+                <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-700">
+                  <h4 className="text-sm font-medium text-slate-900 dark:text-white mb-2">Export Attendance Data</h4>
+                  <div className="flex items-center gap-3">
+                    <select
+                      value={exportHours}
+                      onChange={(e) => setExportHours(Number(e.target.value))}
+                      className="block w-full rounded-md border-0 py-1.5 pl-3 pr-10 text-slate-900 ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-indigo-600 sm:text-sm sm:leading-6 dark:bg-slate-900 dark:text-white dark:ring-slate-700"
+                    >
+                      <option value={1}>Last 1 Hour</option>
+                      <option value={12}>Last 12 Hours</option>
+                      <option value={24}>Last 24 Hours</option>
+                      <option value={168}>Last 7 Days</option>
+                      <option value={720}>Last 30 Days</option>
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => downloadExcelReport(`${API_URL}/export?hours=${exportHours}`, `attendance_export_${exportHours}h.csv`)}
+                      disabled={isDownloading}
+                      className="inline-flex items-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50 disabled:opacity-50 whitespace-nowrap dark:bg-slate-800 dark:text-white dark:ring-slate-600 dark:hover:bg-slate-700"
+                    >
+                      {isDownloading ? "Downloading..." : "Download CSV"}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
