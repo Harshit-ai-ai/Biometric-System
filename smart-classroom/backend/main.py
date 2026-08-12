@@ -201,40 +201,49 @@ import asyncio
 @app.post("/attendance")
 async def process_attendance(req: AttendanceRequest):
     frame = decode_image(req.image)
-    matched_name = embedding_store.match_face(frame)
+    matched_name, face_loc = embedding_store.match_face(frame)
     
     # Save a visual result for the frontend ONNX window
     display_frame = frame.copy()
     
-    if matched_name:
-        embedding_store.log_attendance(matched_name)
-        # Draw green bounding box logic 
-        # (Assuming the face is centered or just putting text)
-        cv2.putText(display_frame, f"Recognized: {matched_name}", (50, 50), 
-                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-        cv2.imwrite("static/result.jpg", display_frame)
+    if face_loc:
+        top, right, bottom, left = face_loc
         
-        # Notify dashboard
-        event_data = {
-            "type": "update",
-            "data": [{
-                "id": "1", 
-                "name": matched_name, 
-                "time": datetime.utcnow().strftime("%H:%M:%S"),
-                "status": "Recognized"
-            }]
-        }
-        for client in dashboard_clients:
-            try:
-                await client.send_json(event_data)
-            except:
-                pass
-        return {"status": "success", "matched": matched_name}
-    
-    cv2.putText(display_frame, "Unrecognized", (50, 50), 
-                cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
-    cv2.imwrite("static/result.jpg", display_frame)
-    return {"status": "unrecognized"}
+        if matched_name:
+            embedding_store.log_attendance(matched_name)
+            # Draw green bounding box logic 
+            cv2.rectangle(display_frame, (left, top), (right, bottom), (0, 255, 0), 2)
+            cv2.putText(display_frame, f"Recognized: {matched_name}", (left, top - 10), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+            cv2.imwrite("static/result.jpg", display_frame)
+            
+            # Notify dashboard
+            event_data = {
+                "type": "update",
+                "data": [{
+                    "id": "1", 
+                    "name": matched_name, 
+                    "time": datetime.utcnow().strftime("%H:%M:%S"),
+                    "status": "Recognized"
+                }]
+            }
+            for client in dashboard_clients:
+                try:
+                    await client.send_json(event_data)
+                except:
+                    pass
+            return {"status": "success", "matched": matched_name}
+        else:
+            cv2.rectangle(display_frame, (left, top), (right, bottom), (0, 0, 255), 2)
+            cv2.putText(display_frame, "Unrecognized", (left, top - 10), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+            cv2.imwrite("static/result.jpg", display_frame)
+            return {"status": "unrecognized"}
+    else:
+        cv2.putText(display_frame, "No Face Detected", (50, 50), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 165, 255), 2)
+        cv2.imwrite("static/result.jpg", display_frame)
+        return {"status": "unrecognized"}
 
 @app.get("/export")
 def export_csv(hours: int = 24):

@@ -25,28 +25,42 @@ def save_encoding(name: str, encoding: np.ndarray):
 def get_face_encoding(image_array: np.ndarray):
     import cv2
     rgb_image = cv2.cvtColor(image_array, cv2.COLOR_BGR2RGB)
-    encodings = face_recognition.face_encodings(rgb_image)
+    face_locations = face_recognition.face_locations(rgb_image, number_of_times_to_upsample=2)
+    if not face_locations:
+        return None
+    encodings = face_recognition.face_encodings(rgb_image, face_locations)
     if encodings:
         return encodings[0]
     return None
 
 def match_face(image_array: np.ndarray):
     encodings = load_encodings()
+    
+    import cv2
+    rgb_image = cv2.cvtColor(image_array, cv2.COLOR_BGR2RGB)
+    face_locations = face_recognition.face_locations(rgb_image, number_of_times_to_upsample=1)
+    
+    if not face_locations:
+        return None, None
+        
+    face_encs = face_recognition.face_encodings(rgb_image, face_locations)
+    if not face_encs:
+        return None, None
+        
     if not encodings:
-        return None
+        return None, face_locations[0]
         
     known_names = list(encodings.keys())
     known_encs = list(encodings.values())
     
-    face_enc = get_face_encoding(image_array)
-    if face_enc is None:
-        return None
+    face_enc = face_encs[0]
+    face_loc = face_locations[0]
         
     matches = face_recognition.compare_faces(known_encs, face_enc, tolerance=0.6)
     if True in matches:
         first_match_index = matches.index(True)
-        return known_names[first_match_index]
-    return None
+        return known_names[first_match_index], face_loc
+    return None, face_loc
 
 def log_attendance(name: str):
     log = []
