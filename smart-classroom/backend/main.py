@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Depends, HTTPException, Security, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import APIKeyHeader
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import os
 import cv2
@@ -38,6 +39,9 @@ app = FastAPI(
     description="Spatial-Temporal Identity & Authorization Engine",
     version="1.0.0",
 )
+
+os.makedirs("static", exist_ok=True)
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 app.add_middleware(
     CORSMiddleware,
@@ -199,8 +203,17 @@ async def process_attendance(req: AttendanceRequest):
     frame = decode_image(req.image)
     matched_name = embedding_store.match_face(frame)
     
+    # Save a visual result for the frontend ONNX window
+    display_frame = frame.copy()
+    
     if matched_name:
         embedding_store.log_attendance(matched_name)
+        # Draw green bounding box logic 
+        # (Assuming the face is centered or just putting text)
+        cv2.putText(display_frame, f"Recognized: {matched_name}", (50, 50), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        cv2.imwrite("static/result.jpg", display_frame)
+        
         # Notify dashboard
         event_data = {
             "type": "update",
@@ -217,6 +230,10 @@ async def process_attendance(req: AttendanceRequest):
             except:
                 pass
         return {"status": "success", "matched": matched_name}
+    
+    cv2.putText(display_frame, "Unrecognized", (50, 50), 
+                cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+    cv2.imwrite("static/result.jpg", display_frame)
     return {"status": "unrecognized"}
 
 @app.get("/export")

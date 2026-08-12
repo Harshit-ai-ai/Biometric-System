@@ -23,7 +23,9 @@ def save_encoding(name: str, encoding: np.ndarray):
         pickle.dump(encodings, f)
 
 def get_face_encoding(image_array: np.ndarray):
-    encodings = face_recognition.face_encodings(image_array)
+    import cv2
+    rgb_image = cv2.cvtColor(image_array, cv2.COLOR_BGR2RGB)
+    encodings = face_recognition.face_encodings(rgb_image)
     if encodings:
         return encodings[0]
     return None
