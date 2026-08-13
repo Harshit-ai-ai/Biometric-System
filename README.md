@@ -1,6 +1,6 @@
 <div align="center">
 
-# AMARYLLIS BIOMETRIC ACCESS SYSTEM
+# BIOMETRIC ACCESS SYSTEM
 
 ### Spatial-Temporal Biometric Identity & Access Control Platform (v1.0)
 **Enterprise-Grade Residential Security System for Controlled Access Across Towers and Common Facilities**
@@ -20,7 +20,7 @@
 
 ## Overview
 
-The **Amaryllis Biometric Access System** is a continuous computer-vision security platform designed to control access to restricted residential facilities.
+The **Biometric Access System** is a continuous computer-vision security platform designed to control access to restricted residential facilities.
 
 The system is intended for deployment at controlled checkpoints such as:
 
