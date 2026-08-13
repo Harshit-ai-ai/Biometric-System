@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
+import * as faceapi from "face-api.js";
 
 // ============================================================
 // API / SECURITY CONFIGURATION
@@ -59,9 +60,21 @@ function App() {
   const cameraVideoRef = useRef(null);
   const enrollmentVideoRef = useRef(null);
   const canvasRef = useRef(null);
+  // Overlay canvas drawn on top of the live camera video
+  const overlayCanvasRef = useRef(null);
 
   const mediaStreamRef = useRef(null);
   const cameraStartRequestRef = useRef(0);
+
+  // face-api.js state
+  const faceApiLoadedRef = useRef(false);
+  const recognitionLoopRef = useRef(null);
+  // Stores { name, descriptor } for enrolled people
+  const knownDescriptorsRef = useRef([]);
+  const [faceApiStatus, setFaceApiStatus] = useState("loading"); // loading | ready | error
+  const [realtimeLabel, setRealtimeLabel] = useState("");
+  // Cooldown to prevent duplicate attendance logs
+  const lastLoggedRef = useRef({});
 
   const [cameraStatus, setCameraStatus] = useState("idle");
   const [cameraError, setCameraError] = useState("");
@@ -75,6 +88,7 @@ function App() {
   const [fedStatus, setFedStatus] = useState(null);
   const [attestation, setAttestation] = useState(null);
   const [activeTab, setActiveTab] = useState("dashboard");
+  const [recognizedEvents, setRecognizedEvents] = useState([]);
 
   // ==========================================================
   // RESIDENT LOOKUP STATE
@@ -96,6 +110,9 @@ function App() {
   // ==========================================================
 
   const [newEmployeeName, setNewEmployeeName] = useState("");
+  const [isResident, setIsResident] = useState(false);
+  const [flatNumber, setFlatNumber] = useState("");
+  const [role, setRole] = useState("");
   const [isEnrolling, setIsEnrolling] = useState(false);
 
   // ==========================================================
@@ -110,6 +127,49 @@ function App() {
   useEffect(() => {
     isLoggedInRef.current = isLoggedIn;
   }, [isLoggedIn]);
+
+  // ==========================================================
+  // FACE-API.JS MODEL LOADING
+  // ==========================================================
+
+  useEffect(() => {
+    const loadModels = async () => {
+      try {
+        const MODEL_URL = "/models";
+        await Promise.all([
+          faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+          faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+          faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
+        ]);
+        faceApiLoadedRef.current = true;
+        setFaceApiStatus("ready");
+      } catch (err) {
+        console.error("face-api.js model loading failed:", err);
+        setFaceApiStatus("error");
+      }
+    };
+    loadModels();
+  }, []);
+
+  // Load enrolled descriptors from backend when entering camera tab
+  const loadEnrolledDescriptors = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API_URL}/enrolled-descriptors`);
+      const entries = res.data?.descriptors || [];
+      if (entries.length > 0) {
+        const labeledDescriptors = entries.map(({ name, descriptor }) => 
+          new faceapi.LabeledFaceDescriptors(name, [new Float32Array(descriptor)])
+        );
+        knownDescriptorsRef.current = [
+          { matcher: new faceapi.FaceMatcher(labeledDescriptors, 0.6) }
+        ];
+      } else {
+        knownDescriptorsRef.current = [];
+      }
+    } catch (err) {
+      console.warn("Could not load enrolled descriptors from server:", err);
+    }
+  }, [API_URL]);
 
   // ==========================================================
   // THEME
@@ -669,75 +729,127 @@ function App() {
   }, [getActiveVideoElement]);
 
   // ==========================================================
-  // ATTENDANCE FRAME
+  // REAL-TIME RECOGNITION LOOP (face-api.js, browser-side)
   // ==========================================================
 
-  const captureFrameAndSend = useCallback(async () => {
-    if (activeTab !== "camera") {
+  const stopRecognitionLoop = useCallback(() => {
+    if (recognitionLoopRef.current) {
+      cancelAnimationFrame(recognitionLoopRef.current);
+      recognitionLoopRef.current = null;
+    }
+    setIsTracking(false);
+    // Clear the overlay
+    if (overlayCanvasRef.current) {
+      const ctx = overlayCanvasRef.current.getContext("2d");
+      ctx && ctx.clearRect(0, 0, overlayCanvasRef.current.width, overlayCanvasRef.current.height);
+    }
+    setRealtimeLabel("");
+  }, []);
+
+  const startRecognitionLoop = useCallback(() => {
+    if (!faceApiLoadedRef.current) {
+      showNotification("Face recognition models still loading, please wait.", "error");
       return;
     }
+    const video = cameraVideoRef.current;
+    const overlay = overlayCanvasRef.current;
+    if (!video || !overlay) return;
 
-    const image = getBase64Frame();
+    setIsTracking(true);
 
-    if (!image) {
-      console.warn("No live camera frame available.");
-      return;
-    }
+    const detect = async () => {
+      if (!cameraVideoRef.current || !overlayCanvasRef.current) return;
+      if (video.readyState < 2 || video.videoWidth === 0) {
+        recognitionLoopRef.current = requestAnimationFrame(detect);
+        return;
+      }
 
-    try {
-      await axios.post(`${API_URL}/attendance`, {
-        image,
-      });
+      // Resize overlay canvas to match video dimensions
+      const displaySize = { width: video.videoWidth, height: video.videoHeight };
+      faceapi.matchDimensions(overlay, displaySize);
 
-      setResultImage(
-        `${API_URL}/static/result.jpg?t=${Date.now()}`
-      );
+      const detections = await faceapi
+        .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 }))
+        .withFaceLandmarks()
+        .withFaceDescriptors();
 
-      // Refresh dashboard numbers after processing a frame.
-      fetchSystemStatus();
-    } catch (err) {
-      console.error("Error processing frame:", err);
-    }
-  }, [
-    activeTab,
-    getBase64Frame,
-    API_URL,
-    fetchSystemStatus,
-  ]);
+      const resized = faceapi.resizeResults(detections, displaySize);
 
-  // ==========================================================
-  // TRACKING
-  // ==========================================================
+      const ctx = overlay.getContext("2d");
+      ctx.clearRect(0, 0, overlay.width, overlay.height);
+
+      const known = knownDescriptorsRef.current;
+      const now = Date.now();
+      const COOLDOWN_MS = 10000; // log same person at most every 10 seconds
+
+      for (const det of resized) {
+        const { x, y, width, height } = det.detection.box;
+        let label = "Unknown";
+        let color = "#ef4444"; // red
+
+        if (known.length > 0) {
+          const matcher = known[0].matcher;
+          const result = matcher.findBestMatch(det.descriptor);
+          
+          if (result.label !== "unknown") {
+            label = result.label;
+            color = "#22c55e"; // green
+            
+            // Log attendance with cooldown
+            if (!lastLoggedRef.current[label] || now - lastLoggedRef.current[label] > COOLDOWN_MS) {
+              lastLoggedRef.current[label] = now;
+              const ts = new Date().toISOString();
+              setRecognizedEvents(prev => [{ name: label, timestamp: ts }, ...prev.slice(0, 199)]);
+              // Also log to backend so CSV export works
+              axios.post(`${API_URL}/log-attendance`, { name: label }).catch(() => { });
+            }
+          }
+        }
+
+        // Draw box
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x, y, width, height);
+
+        // Label background
+        ctx.fillStyle = color;
+        const textH = 20;
+        ctx.fillRect(x, y - textH, width, textH);
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "bold 13px Inter, sans-serif";
+        ctx.fillText(label, x + 4, y - 5);
+      }
+
+      if (resized.length > 0) {
+        setRealtimeLabel(resized.map(d => {
+          if (known.length === 0) return "Unknown";
+          const result = known[0].matcher.findBestMatch(d.descriptor);
+          return result.label !== "unknown" ? result.label : "Unknown";
+        }).join(", "));
+      } else {
+        setRealtimeLabel("");
+      }
+
+      recognitionLoopRef.current = requestAnimationFrame(detect);
+    };
+
+    detect();
+  }, [showNotification, API_URL]);
 
   const toggleTracking = () => {
     if (isTracking) {
-      if (trackInterval.current) {
-        clearInterval(trackInterval.current);
-        trackInterval.current = null;
-      }
-
-      setIsTracking(false);
+      stopRecognitionLoop();
       return;
     }
-
     if (activeTab !== "camera") {
-      showNotification(
-        "Open the Live Camera tab before starting tracking.",
-        "error"
-      );
+      showNotification("Open the Live Camera tab before starting tracking.", "error");
       return;
     }
-
-    // Process one frame immediately.
-    captureFrameAndSend();
-
-    // Then continue every 3 seconds.
-    trackInterval.current = setInterval(
-      captureFrameAndSend,
-      3000
-    );
-
-    setIsTracking(true);
+    if (cameraStatus !== "live") {
+      showNotification("Enable the camera first.", "error");
+      return;
+    }
+    loadEnrolledDescriptors().then(() => startRecognitionLoop());
   };
 
   // ==========================================================
@@ -753,56 +865,61 @@ function App() {
     }
 
     if (activeTab !== "enrollment") {
-      showNotification(
-        "Open the Enrollment tab before capturing a resident.",
-        "error"
-      );
+      showNotification("Open the Enrollment tab before capturing a resident.", "error");
       return;
     }
 
-    const image = getBase64Frame();
+    if (!faceApiLoadedRef.current) {
+      showNotification("Face recognition models still loading, please wait.", "error");
+      return;
+    }
 
-    if (!image) {
-      showNotification(
-        "Live camera frame unavailable. Please enable the webcam and wait for the preview.",
-        "error"
-      );
+    const video = enrollmentVideoRef.current;
+    if (!video || video.readyState < 2 || video.videoWidth === 0) {
+      showNotification("Live camera frame unavailable. Enable the webcam first.", "error");
       return;
     }
 
     setIsEnrolling(true);
 
     try {
+      // Extract descriptor directly in the browser — high quality, no upload latency
+      const detection = await faceapi
+        .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.5 }))
+        .withFaceLandmarks()
+        .withFaceDescriptor();
+
+      if (!detection) {
+        showNotification("No face detected. Look directly at the camera and try again.", "error");
+        setIsEnrolling(false);
+        return;
+      }
+
+      const descriptor = Array.from(detection.descriptor);
+
       const res = await axios.post(`${API_URL}/enroll`, {
         employee_name: newEmployeeName.trim(),
-        image,
+        descriptor,
+        is_resident: isResident,
+        flat_number: isResident ? flatNumber.trim() : null,
+        role: !isResident ? role.trim() : null
       });
 
       if (res.data?.status === "success") {
-        showNotification(
-          res.data.message || "Enrollment successful.",
-          "success"
-        );
+        showNotification(res.data.message || "Enrollment successful.", "success");
         setNewEmployeeName("");
+        setFlatNumber("");
+        setRole("");
+        setIsResident(false);
+        // Reload descriptors if recognition loop is running
+        if (isTracking) loadEnrolledDescriptors();
       } else {
-        showNotification(
-          res.data?.message || "Enrollment failed.",
-          "error"
-        );
+        showNotification(res.data?.message || "Enrollment failed.", "error");
       }
-    } catch (e) {
-      console.error("Enrollment error:", e);
-
-      const detail =
-        e?.response?.data?.detail ||
-        e?.response?.data?.message;
-
-      showNotification(
-        detail
-          ? `Enrollment failed: ${detail}`
-          : "Enrollment failed. API error.",
-        "error"
-      );
+    } catch (err) {
+      console.error("Enrollment error:", err);
+      const detail = err?.response?.data?.detail || err?.response?.data?.message;
+      showNotification(detail ? `Enrollment failed: ${detail}` : "Enrollment failed. API error.", "error");
     } finally {
       setIsEnrolling(false);
     }
@@ -814,12 +931,7 @@ function App() {
 
   const handleTabChange = (tabId) => {
     if (isTracking && tabId !== "camera") {
-      if (trackInterval.current) {
-        clearInterval(trackInterval.current);
-        trackInterval.current = null;
-      }
-
-      setIsTracking(false);
+      stopRecognitionLoop();
     }
 
     setActiveTab(tabId);
@@ -1108,9 +1220,6 @@ function App() {
                   <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white leading-tight">
                     UNITY
                   </h1>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 font-medium tracking-wide uppercase">
-                    UNITY System
-                  </p>
                 </div>
               </div>
 
@@ -1466,6 +1575,53 @@ function App() {
                     </div>
                   </div>
 
+                  <div className="flex items-center">
+                    <input
+                      id="isResident"
+                      type="checkbox"
+                      checked={isResident}
+                      onChange={(e) => setIsResident(e.target.checked)}
+                      className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600"
+                    />
+                    <label htmlFor="isResident" className="ml-2 block text-sm font-medium leading-6 text-slate-900 dark:text-slate-200">
+                      Is this person a Resident?
+                    </label>
+                  </div>
+
+                  {isResident ? (
+                    <div>
+                      <label className="block text-sm font-medium leading-6 text-slate-900 dark:text-slate-200">
+                        Flat Number
+                      </label>
+                      <div className="mt-2">
+                        <input
+                          type="text"
+                          required
+                          className="block w-full rounded-md border-0 py-2.5 px-3 text-slate-900 dark:text-white bg-white dark:bg-slate-900 ring-1 ring-inset ring-slate-300 dark:ring-slate-700 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6 transition-colors"
+                          placeholder="e.g. 101"
+                          value={flatNumber}
+                          onChange={(e) => setFlatNumber(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="block text-sm font-medium leading-6 text-slate-900 dark:text-slate-200">
+                        Role / Purpose
+                      </label>
+                      <div className="mt-2">
+                        <input
+                          type="text"
+                          required
+                          className="block w-full rounded-md border-0 py-2.5 px-3 text-slate-900 dark:text-white bg-white dark:bg-slate-900 ring-1 ring-inset ring-slate-300 dark:ring-slate-700 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6 transition-colors"
+                          placeholder="e.g. Plumber, Security, Guest"
+                          value={role}
+                          onChange={(e) => setRole(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  )}
+
                   <div className="rounded-lg bg-slate-100 dark:bg-slate-900 p-4 border border-slate-200 dark:border-slate-700">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
@@ -1587,6 +1743,12 @@ function App() {
                     muted
                     className="w-full h-auto rounded-lg bg-slate-900 border border-slate-200 dark:border-slate-700 object-cover aspect-video"
                   />
+                  {/* Real-time recognition overlay canvas */}
+                  <canvas
+                    ref={overlayCanvasRef}
+                    className="absolute inset-0 w-full h-full rounded-lg"
+                    style={{ pointerEvents: "none" }}
+                  />
 
                   {cameraStatus !== "live" && (
                     <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/50">
@@ -1611,29 +1773,66 @@ function App() {
                       </div>
                     </div>
                   )}
+
+                  {/* Live recognition label badge */}
+                  {isTracking && (
+                    <div className="absolute bottom-2 left-2 right-2">
+                      <div className={`rounded-md px-3 py-1.5 text-sm font-semibold text-white shadow-lg ${realtimeLabel && realtimeLabel !== "Unknown"
+                        ? "bg-emerald-600/90"
+                        : realtimeLabel === "Unknown"
+                          ? "bg-red-600/90"
+                          : "bg-slate-700/80"
+                        }`}>
+                        {realtimeLabel
+                          ? realtimeLabel === "Unknown"
+                            ? "⚠ Unrecognized Person"
+                            : `✓ Recognized: ${realtimeLabel}`
+                          : "Scanning…"}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
               <div className="px-4 py-4 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-700">
+                {/* Models status pill */}
+                <div className="mb-3 flex items-center gap-2">
+                  <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${faceApiStatus === "ready" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                    : faceApiStatus === "error" ? "bg-red-100 text-red-700"
+                      : "bg-amber-100 text-amber-700"
+                    }`}>
+                    {faceApiStatus === "ready" ? "● Models Ready" : faceApiStatus === "error" ? "● Model Error" : "● Loading Models…"}
+                  </span>
+                </div>
+
                 <button
                   onClick={toggleTracking}
-                  disabled={cameraStatus !== "live"}
+                  disabled={cameraStatus !== "live" || faceApiStatus !== "ready"}
                   className={`w-full flex justify-center items-center py-2.5 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed ${isTracking
                     ? "bg-red-600 hover:bg-red-700 focus:ring-red-500"
                     : "bg-indigo-600 hover:bg-indigo-700 focus:ring-indigo-500"
                     }`}
                 >
                   {isTracking
-                    ? "Stop Tracking Engine"
-                    : "Initialize Continuous Tracking (3s)"}
+                    ? "Stop Real-Time Recognition"
+                    : "Start Real-Time Recognition"}
                 </button>
 
-                <div className="mt-3 text-xs text-center text-slate-500 dark:text-slate-400">
-                  <strong>Note:</strong> If the Edge CCTV
-                  Gateway is running remotely, you do not need to
-                  initialize local tracking.
-                </div>
-                
+                {/* Live event log */}
+                {recognizedEvents.length > 0 && (
+                  <div className="mt-4">
+                    <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">Recent detections (this session)</p>
+                    <div className="max-h-32 overflow-y-auto rounded-md border border-slate-200 dark:border-slate-700 divide-y divide-slate-100 dark:divide-slate-700">
+                      {recognizedEvents.slice(0, 20).map((ev, i) => (
+                        <div key={i} className="flex items-center justify-between px-3 py-1.5 text-xs">
+                          <span className="font-medium text-slate-800 dark:text-white">{ev.name}</span>
+                          <span className="text-slate-400">{new Date(ev.timestamp).toLocaleTimeString()}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-700">
                   <h4 className="text-sm font-medium text-slate-900 dark:text-white mb-2">Export Attendance Data</h4>
                   <div className="flex items-center gap-3">
@@ -1803,32 +2002,27 @@ function App() {
 
                     <div className="overflow-hidden rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-sm px-4 py-5 sm:p-6 transition-colors">
                       <dt className="truncate text-sm font-medium text-slate-500 dark:text-slate-400">
-                        Attendance Rate
+                        Profile Type
                       </dt>
 
                       <dd
-                        className={`mt-2 text-3xl font-semibold tracking-tight ${Number(
-                          employeeProfile.attendance_rate || 0
-                        ) >= 75
-                          ? "text-emerald-600 dark:text-emerald-400"
-                          : "text-red-600 dark:text-red-400"
-                          }`}
+                        className={`mt-2 text-3xl font-semibold tracking-tight ${
+                          employeeProfile.is_resident
+                            ? "text-emerald-600 dark:text-emerald-400"
+                            : "text-blue-600 dark:text-blue-400"
+                        }`}
                       >
-                        {employeeProfile.attendance_rate ?? 0}%
+                        {employeeProfile.is_resident ? "Resident" : "Non-Resident"}
                       </dd>
                     </div>
 
                     <div className="overflow-hidden rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-sm px-4 py-5 sm:p-6 transition-colors">
                       <dt className="truncate text-sm font-medium text-slate-500 dark:text-slate-400">
-                        Assigned Areas Present
+                        {employeeProfile.is_resident ? "Flat Number" : "Role / Purpose"}
                       </dt>
 
                       <dd className="mt-2 text-3xl font-semibold tracking-tight text-slate-900 dark:text-white">
-                        {employeeProfile.classes_present ?? 0}
-                        <span className="text-xl text-slate-400 dark:text-slate-500 font-normal">
-                          {" "}
-                          / {employeeProfile.total_classes ?? 0}
-                        </span>
+                        {employeeProfile.is_resident ? (employeeProfile.flat_number || "---") : (employeeProfile.role || "---")}
                       </dd>
                     </div>
 

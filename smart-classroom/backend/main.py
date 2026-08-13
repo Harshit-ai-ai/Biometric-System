@@ -10,7 +10,7 @@ import base64
 from datetime import datetime
 
 from db.session import SessionLocal, init_db, get_db
-from db.schema import Person, BiometricEvent, Zone, MovementEvent, AccessDecision
+from db.schema import Person, BiometricEvent, Zone, MovementEvent, AccessDecision, PersonType, Residence, PersonResidence
 from identity.face_periocular import face_periocular_engine
 from identity.matching import identity_matcher
 from authorization.engine import authorization_engine
@@ -61,10 +61,19 @@ class AccessRequest(BaseModel):
     terminal_id: str
     image_base64: str
 
+from typing import Optional
+
 class EnrollRequest(BaseModel):
     employee_name: str
-    image: str
+    descriptor: list  # 128-float array computed by face-api.js in the browser
+    is_resident: bool = False
+    flat_number: Optional[str] = None
+    role: Optional[str] = None
 
+class LogAttendanceRequest(BaseModel):
+    name: str
+
+# AttendanceRequest kept for legacy/checkpoint use
 class AttendanceRequest(BaseModel):
     image: str
 
@@ -175,14 +184,80 @@ def admin_enroll_person(req: Request):
     return {"status": "Enrolled (Mock)"}
 
 @app.post("/enroll")
-def enroll(req: EnrollRequest):
-    frame = decode_image(req.image)
-    face_enc = embedding_store.get_face_encoding(frame)
-    if face_enc is None:
-        return {"status": "error", "message": "No face found in image."}
+def enroll(req: EnrollRequest, db = Depends(get_db)):
+    """Store a face descriptor (128-float array) computed by face-api.js in the browser."""
+    descriptor = np.array(req.descriptor, dtype=np.float64)
+    embedding_store.save_encoding(req.employee_name, descriptor)
     
-    embedding_store.save_encoding(req.employee_name, face_enc)
+    person_id = f"P_{req.employee_name.replace(' ', '_')}"
+    person = db.query(Person).filter(Person.person_id == person_id).first()
+    
+    person_type = PersonType.RESIDENT if req.is_resident else PersonType.GUEST
+    
+    if not person:
+        person = Person(
+            person_id=person_id,
+            name=req.employee_name,
+            person_type=person_type,
+            phone=req.role if not req.is_resident else None
+        )
+        db.add(person)
+    else:
+        person.person_type = person_type
+        person.phone = req.role if not req.is_resident else None
+        
+    if req.is_resident and req.flat_number:
+        res = db.query(Residence).filter(Residence.flat_number == req.flat_number).first()
+        if not res:
+            res = Residence(residence_id=f"R_{req.flat_number}", tower="Default", flat_number=req.flat_number)
+            db.add(res)
+            db.flush()
+            
+        pr = db.query(PersonResidence).filter(PersonResidence.person_id == person_id).first()
+        if not pr:
+            pr = PersonResidence(person_id=person.person_id, residence_id=res.residence_id, relationship_type="resident")
+            db.add(pr)
+    
+    db.commit()
     return {"status": "success", "message": f"{req.employee_name} enrolled successfully."}
+
+@app.get("/employee/{name}")
+def get_employee(name: str, db = Depends(get_db)):
+    person = db.query(Person).filter(Person.name == name).first()
+    if not person:
+        raise HTTPException(status_code=404, detail="Person not found")
+        
+    flat_number = None
+    if person.residences and len(person.residences) > 0:
+        flat_number = person.residences[0].residence.flat_number
+        
+    # Mocking attendance stats for UI compatibility
+    return {
+        "name": person.name,
+        "is_resident": person.person_type == PersonType.RESIDENT,
+        "flat_number": flat_number,
+        "role": person.phone if person.person_type != PersonType.RESIDENT else None,
+        "attendance_rate": 100,
+        "classes_present": 1,
+        "total_classes": 1,
+        "history": []
+    }
+
+@app.get("/enrolled-descriptors")
+def get_enrolled_descriptors():
+    """Return all stored face descriptors so the browser can do real-time matching."""
+    encodings = embedding_store.load_encodings()
+    result = [
+        {"name": name, "descriptor": enc.tolist()}
+        for name, enc in encodings.items()
+    ]
+    return {"descriptors": result}
+
+@app.post("/log-attendance")
+def log_attendance_endpoint(req: LogAttendanceRequest):
+    """Called by browser when a face is recognized; records timestamp to attendance log."""
+    embedding_store.log_attendance(req.name)
+    return {"status": "logged"}
 
 dashboard_clients = []
 
@@ -194,56 +269,8 @@ async def websocket_dashboard(websocket: WebSocket):
         while True:
             await websocket.receive_text()
     except WebSocketDisconnect:
-        dashboard_clients.remove(websocket)
-
-import asyncio
-
-@app.post("/attendance")
-async def process_attendance(req: AttendanceRequest):
-    frame = decode_image(req.image)
-    matched_name, face_loc = embedding_store.match_face(frame)
-    
-    # Save a visual result for the frontend ONNX window
-    display_frame = frame.copy()
-    
-    if face_loc:
-        top, right, bottom, left = face_loc
-        
-        if matched_name:
-            embedding_store.log_attendance(matched_name)
-            # Draw green bounding box logic 
-            cv2.rectangle(display_frame, (left, top), (right, bottom), (0, 255, 0), 2)
-            cv2.putText(display_frame, f"Recognized: {matched_name}", (left, top - 10), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
-            cv2.imwrite("static/result.jpg", display_frame)
-            
-            # Notify dashboard
-            event_data = {
-                "type": "update",
-                "data": [{
-                    "id": "1", 
-                    "name": matched_name, 
-                    "time": datetime.utcnow().strftime("%H:%M:%S"),
-                    "status": "Recognized"
-                }]
-            }
-            for client in dashboard_clients:
-                try:
-                    await client.send_json(event_data)
-                except:
-                    pass
-            return {"status": "success", "matched": matched_name}
-        else:
-            cv2.rectangle(display_frame, (left, top), (right, bottom), (0, 0, 255), 2)
-            cv2.putText(display_frame, "Unrecognized", (left, top - 10), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
-            cv2.imwrite("static/result.jpg", display_frame)
-            return {"status": "unrecognized"}
-    else:
-        cv2.putText(display_frame, "No Face Detected", (50, 50), 
-                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 165, 255), 2)
-        cv2.imwrite("static/result.jpg", display_frame)
-        return {"status": "unrecognized"}
+        if websocket in dashboard_clients:
+            dashboard_clients.remove(websocket)
 
 @app.get("/export")
 def export_csv(hours: int = 24):
