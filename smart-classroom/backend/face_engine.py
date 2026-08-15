@@ -7,11 +7,8 @@ import base64
 import torch
 from ultralytics import YOLO
 from cryptography.fernet import Fernet
-<<<<<<< HEAD
 from liveness.screen_spoof import screen_spoof_engine
 from liveness.pad_model import pad_detector
-=======
->>>>>>> 23dabe834c67990cb98aa994b5af7393507d14bc
 
 # Fix for PyTorch 2.6 weights_only unpickling error
 _original_load = torch.load
@@ -168,7 +165,6 @@ def recognize(base64_image):
                 # Floating face detected (spoof)
                 continue
 
-<<<<<<< HEAD
             # Level 3: screen-spoof detection. The YOLO body-gate above
             # catches a face floating with no body around it; this catches
             # the other classic attack, a phone/tablet held *inside* a
@@ -192,8 +188,6 @@ def recognize(base64_image):
             if pad_check.get("loaded") and pad_check["state"] == "spoof_suspected":
                 continue
 
-=======
->>>>>>> 23dabe834c67990cb98aa994b5af7393507d14bc
             best_name = None
             best_distance = 999
 
