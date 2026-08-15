@@ -18,12 +18,9 @@ from identity.matching import identity_matcher
 from authorization.engine import authorization_engine
 from integration.dwaar_client import dwaar_client
 from analytics.movement import anomaly_engine
-<<<<<<< HEAD
 from liveness.temporal_motion import temporal_motion_engine
 from liveness.screen_spoof import screen_spoof_engine
 from liveness.pad_model import pad_detector
-=======
->>>>>>> 23dabe834c67990cb98aa994b5af7393507d14bc
 
 from fastapi import WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
@@ -81,20 +78,16 @@ class EnrollRequest(BaseModel):
 
 class LogAttendanceRequest(BaseModel):
     name: str
-<<<<<<< HEAD
     # Optional Level 1 (temporal motion) liveness signal computed client-side
     # by tracking face-api.js landmark deformation over a ~1s window. Kept
     # optional so older frontend builds that don't send it still work.
     liveness_score: Optional[float] = None
     liveness_level: Optional[str] = None
-=======
->>>>>>> 23dabe834c67990cb98aa994b5af7393507d14bc
 
 # AttendanceRequest kept for legacy/checkpoint use
 class AttendanceRequest(BaseModel):
     image: str
 
-<<<<<<< HEAD
 class TemporalMotionLivenessRequest(BaseModel):
     # A short burst of base64 frames (e.g. 5-10 frames) captured roughly
     # 1 second apart-to-apart in total for a single person — see
@@ -114,8 +107,6 @@ class PADModelCheckRequest(BaseModel):
     # state="model_not_loaded" (not an error) until a model is present.
     frames: list
 
-=======
->>>>>>> 23dabe834c67990cb98aa994b5af7393507d14bc
 # --- Helper Functions ---
 def decode_image(b64_str: str) -> np.ndarray:
     if "," in b64_str:
@@ -218,7 +209,6 @@ def process_scan(req: AccessRequest, db = Depends(get_db)):
         "anomaly_score": anomaly["anomaly_score"]
     }
 
-<<<<<<< HEAD
 @app.post("/liveness/temporal-motion")
 def check_temporal_motion_liveness(req: TemporalMotionLivenessRequest):
     """
@@ -360,8 +350,6 @@ def check_liveness_cascade(req: TemporalMotionLivenessRequest):
         "pad_model": pad_result,
     }
 
-=======
->>>>>>> 23dabe834c67990cb98aa994b5af7393507d14bc
 @app.post("/admin/enroll", dependencies=[Depends(get_api_key)])
 def admin_enroll_person(req: Request):
     return {"status": "Enrolled (Mock)"}
@@ -495,7 +483,6 @@ def list_residents(db = Depends(get_db)):
 
 @app.post("/log-attendance")
 def log_attendance_endpoint(req: LogAttendanceRequest):
-<<<<<<< HEAD
     """Called by browser when a face is recognized; records timestamp to attendance log.
 
     If the browser included a Level 1 (temporal motion) liveness score
@@ -507,10 +494,6 @@ def log_attendance_endpoint(req: LogAttendanceRequest):
         liveness_score=req.liveness_score,
         liveness_level=req.liveness_level,
     )
-=======
-    """Called by browser when a face is recognized; records timestamp to attendance log."""
-    entry = embedding_store.log_attendance(req.name)
->>>>>>> 23dabe834c67990cb98aa994b5af7393507d14bc
     return {"status": "logged", "entry": entry}
 
 dashboard_clients = []
