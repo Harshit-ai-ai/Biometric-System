@@ -36,7 +36,6 @@ function getWsUrl(apiUrl) {
   }
 }
 
-<<<<<<< HEAD
 // ============================================================
 // LEVEL 1 LIVENESS — TEMPORAL MOTION
 // ============================================================
@@ -152,8 +151,82 @@ function pruneTemporalMotionHistory(historyRef, now, staleMs = 5000) {
   }
 }
 
-=======
->>>>>>> 23dabe834c67990cb98aa994b5af7393507d14bc
+// ============================================================
+// LEVEL 1b LIVENESS — BLINK DETECTION (EYE ASPECT RATIO)
+// ============================================================
+// Passive landmark-jitter alone (Level 1 above) can be defeated: a printed
+// photo held with a slightly shaky hand, glare/JPEG noise, or plain
+// frame-to-frame landmark-detector jitter can accumulate enough
+// "relative motion" to cross the static/live threshold even though the
+// face in front of the camera never actually moved. A blink closes that
+// gap. A printed photo or a paused/replayed video frame physically
+// cannot blink on demand, so requiring at least one genuine close->reopen
+// eye cycle inside a short trust window is a much stronger, much harder
+// to fake signal than motion magnitude alone. From here on, a face is
+// only ever treated as "live" (and only then eligible to log attendance)
+// when BOTH the existing motion check AND a recent blink agree — the
+// original Level 1 motion check is unchanged, this is an additional gate
+// layered on top of it, not a replacement.
+
+const EAR_BLINK_THRESHOLD = 0.21; // eye aspect ratio below this = eyes closed
+const EAR_OPEN_THRESHOLD = 0.25;  // must recover above this to count as "reopened"
+const BLINK_TRUST_WINDOW_MS = 6000; // a blink observed in the last 6s counts as proof of life
+const BLINK_STALE_MS = 5000; // matches pruneTemporalMotionHistory's staleMs
+
+/**
+ * Eye Aspect Ratio (Soukupová & Čech, 2016): ratio of an eye's vertical
+ * opening to its horizontal width, computed from 6 landmark points
+ * (face-api.js's getLeftEye()/getRightEye() each return exactly 6).
+ * EAR drops sharply during a blink and springs back immediately after —
+ * a very distinctive, hard-to-accidentally-reproduce signal compared to
+ * the near-flat curve a static image produces.
+ */
+function eyeAspectRatio(eye) {
+  const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+  const vertical = dist(eye[1], eye[5]) + dist(eye[2], eye[4]);
+  const horizontal = dist(eye[0], eye[3]);
+  if (horizontal === 0) return 0;
+  return vertical / (2 * horizontal);
+}
+
+/**
+ * Feeds one frame's landmarks into a per-identity blink state machine and
+ * returns whether a full close->reopen blink cycle has been observed
+ * within BLINK_TRUST_WINDOW_MS.
+ */
+function updateBlinkLiveness(blinkStateRef, key, landmarks, now) {
+  const leftEAR = eyeAspectRatio(landmarks.getLeftEye());
+  const rightEAR = eyeAspectRatio(landmarks.getRightEye());
+  const ear = (leftEAR + rightEAR) / 2;
+
+  const state = blinkStateRef.current[key] || { eyeClosed: false, lastBlinkAt: 0 };
+
+  if (!state.eyeClosed && ear < EAR_BLINK_THRESHOLD) {
+    // Eyes just closed — start of a potential blink
+    state.eyeClosed = true;
+  } else if (state.eyeClosed && ear > EAR_OPEN_THRESHOLD) {
+    // Eyes reopened after having closed — that's a completed blink
+    state.eyeClosed = false;
+    state.lastBlinkAt = now;
+  }
+
+  state.lastSeenAt = now;
+  blinkStateRef.current[key] = state;
+
+  const blinkedRecently = state.lastBlinkAt > 0 && (now - state.lastBlinkAt) <= BLINK_TRUST_WINDOW_MS;
+  return { ear, blinkedRecently, lastBlinkAt: state.lastBlinkAt };
+}
+
+/** Drops any tracked identities we haven't seen in a while. */
+function pruneBlinkHistory(blinkStateRef, now, staleMs = BLINK_STALE_MS) {
+  for (const key of Object.keys(blinkStateRef.current)) {
+    const state = blinkStateRef.current[key];
+    if (!state || now - state.lastSeenAt > staleMs) {
+      delete blinkStateRef.current[key];
+    }
+  }
+}
+
 function App() {
   const API_URL = getApiUrl();
   const WS_URL = getWsUrl(API_URL);
@@ -194,7 +267,6 @@ function App() {
   // Cooldown to prevent duplicate attendance logs
   const lastLoggedRef = useRef({});
 
-<<<<<<< HEAD
   // --- Level 1 Liveness: Temporal Motion (see computeTemporalMotionScore) ---
   // Rolling ~1s buffer of normalized landmark snapshots, keyed by recognized
   // label. Used to tell a live face (blinks/micro-expressions cause small
@@ -206,8 +278,14 @@ function App() {
   // Throttle the "possible spoof" warning so it doesn't spam every frame
   const lastSpoofWarningRef = useRef({});
 
-=======
->>>>>>> 23dabe834c67990cb98aa994b5af7393507d14bc
+  // --- Level 1b Liveness: Blink Detection (see updateBlinkLiveness) ---
+  // Per-identity eye-open/closed state machine, tracked separately from
+  // the motion-history buffer above so a photo can't be waved around
+  // just enough to pass the motion check without ever actually blinking.
+  const blinkStateRef = useRef({});
+  // Throttle the "no blink yet" notice separately from the static-photo one
+  const lastNoBlinkWarningRef = useRef({});
+
   const [cameraStatus, setCameraStatus] = useState("idle");
   const [cameraError, setCameraError] = useState("");
 
@@ -973,12 +1051,9 @@ function App() {
       const known = knownDescriptorsRef.current;
       const now = Date.now();
       const COOLDOWN_MS = 10000; // log same person at most every 10 seconds
-<<<<<<< HEAD
       const SPOOF_WARNING_COOLDOWN_MS = 8000;
 
       const nextLivenessByLabel = {};
-=======
->>>>>>> 23dabe834c67990cb98aa994b5af7393507d14bc
 
       for (const det of resized) {
         const { x, y, width, height } = det.detection.box;
@@ -988,11 +1063,10 @@ function App() {
         if (known.length > 0) {
           const matcher = known[0].matcher;
           const result = matcher.findBestMatch(det.descriptor);
-          
+
           if (result.label !== "unknown") {
             label = result.label;
             color = "#22c55e"; // green
-<<<<<<< HEAD
 
             // --- Level 1 Liveness: Temporal Motion ---
             // Track this person's landmarks over the last ~1s before we
@@ -1005,7 +1079,17 @@ function App() {
               det.detection.box,
               now
             );
-            nextLivenessByLabel[label] = liveness;
+            // Level 1b: blink confirmation. Computed every frame regardless
+            // of the motion verdict so the blink window stays warm.
+            const blink = updateBlinkLiveness(blinkStateRef, label, det.landmarks, now);
+            nextLivenessByLabel[label] = { ...liveness, blink };
+
+            // A face only counts as fully "live" once BOTH signals agree:
+            // motion isn't frozen (Level 1) AND a real blink was observed
+            // recently (Level 1b). Requiring both closes the gap where a
+            // shaky-handed printed photo alone could cross the motion
+            // threshold without ever blinking.
+            const fullyLive = liveness.state === "live" && blink.blinkedRecently;
 
             if (liveness.state === "static") {
               color = "#f59e0b"; // amber — recognized, but motion looks suspicious
@@ -1019,17 +1103,25 @@ function App() {
                   "error"
                 );
               }
+            } else if (liveness.state === "live" && !blink.blinkedRecently) {
+              color = "#f59e0b"; // amber — motion looks live, but no blink confirmed yet
+              if (
+                !lastNoBlinkWarningRef.current[label] ||
+                now - lastNoBlinkWarningRef.current[label] > SPOOF_WARNING_COOLDOWN_MS
+              ) {
+                lastNoBlinkWarningRef.current[label] = now;
+                showNotification(
+                  `${label} matched, but no blink was detected yet — attendance will log once liveness is confirmed.`,
+                  "error"
+                );
+              }
             } else if (
-              liveness.state === "live" &&
+              fullyLive &&
               (!lastLoggedRef.current[label] || now - lastLoggedRef.current[label] > COOLDOWN_MS)
             ) {
-              // Log attendance with cooldown — only once Level 1 liveness
-              // has actually confirmed real landmark motion.
-=======
-            
-            // Log attendance with cooldown
-            if (!lastLoggedRef.current[label] || now - lastLoggedRef.current[label] > COOLDOWN_MS) {
->>>>>>> 23dabe834c67990cb98aa994b5af7393507d14bc
+              // Log attendance with cooldown — only once BOTH Level 1
+              // (motion) and Level 1b (blink) liveness have confirmed a
+              // real, live person.
               lastLoggedRef.current[label] = now;
               const ts = new Date().toISOString();
               const eventKey = `${label}-${ts}`;
@@ -1038,15 +1130,11 @@ function App() {
               // name + timestamp in the CSV export. We track whether this
               // actually succeeded (instead of silently swallowing errors)
               // so the UI can tell the user when a scan was NOT saved.
-<<<<<<< HEAD
               axios.post(`${API_URL}/log-attendance`, {
                 name: label,
                 liveness_score: liveness.score,
                 liveness_level: "temporal_motion",
               })
-=======
-              axios.post(`${API_URL}/log-attendance`, { name: label })
->>>>>>> 23dabe834c67990cb98aa994b5af7393507d14bc
                 .then(() => {
                   setRecognizedEvents(prev => prev.map(ev =>
                     ev.key === eventKey ? { ...ev, synced: true } : ev
@@ -1074,23 +1162,19 @@ function App() {
         ctx.fillRect(x, y - textH, width, textH);
         ctx.fillStyle = "#ffffff";
         ctx.font = "bold 13px Inter, sans-serif";
-<<<<<<< HEAD
         const liveness = label !== "Unknown" ? nextLivenessByLabel[label] : null;
         const livenessTag =
-          liveness?.state === "live" ? " \u2713 live" :
-          liveness?.state === "static" ? " \u26a0 static" :
-          liveness?.state === "checking" ? " \u22ef verifying" : "";
+          liveness?.state === "live" && liveness?.blink?.blinkedRecently ? " \u2713 live" :
+            liveness?.state === "live" ? " \u2022 blink to confirm" :
+              liveness?.state === "static" ? " \u26a0 static" :
+                liveness?.state === "checking" ? " \u22ef verifying" : "";
         ctx.fillText(`${label}${livenessTag}`, x + 4, y - 5);
       }
 
       pruneTemporalMotionHistory(landmarkHistoryRef, now);
+      pruneBlinkHistory(blinkStateRef, now);
       setLivenessByLabel(nextLivenessByLabel);
 
-=======
-        ctx.fillText(label, x + 4, y - 5);
-      }
-
->>>>>>> 23dabe834c67990cb98aa994b5af7393507d14bc
       if (resized.length > 0) {
         setRealtimeLabel(resized.map(d => {
           if (known.length === 0) return "Unknown";
@@ -2320,11 +2404,10 @@ function App() {
                       </dt>
 
                       <dd
-                        className={`mt-2 text-3xl font-semibold tracking-tight ${
-                          employeeProfile.is_resident
-                            ? "text-emerald-600 dark:text-emerald-400"
-                            : "text-blue-600 dark:text-blue-400"
-                        }`}
+                        className={`mt-2 text-3xl font-semibold tracking-tight ${employeeProfile.is_resident
+                          ? "text-emerald-600 dark:text-emerald-400"
+                          : "text-blue-600 dark:text-blue-400"
+                          }`}
                       >
                         {employeeProfile.is_resident ? "Resident" : "Non-Resident"}
                       </dd>
@@ -2573,11 +2656,10 @@ function App() {
                           </td>
                           <td className="whitespace-nowrap px-3 py-4 text-sm">
                             <span
-                              className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ${
-                                person.is_resident
-                                  ? "bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-900/30 dark:text-emerald-400 dark:ring-emerald-500/20"
-                                  : "bg-blue-50 text-blue-700 ring-blue-600/20 dark:bg-blue-900/30 dark:text-blue-400 dark:ring-blue-500/20"
-                              }`}
+                              className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ${person.is_resident
+                                ? "bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-900/30 dark:text-emerald-400 dark:ring-emerald-500/20"
+                                : "bg-blue-50 text-blue-700 ring-blue-600/20 dark:bg-blue-900/30 dark:text-blue-400 dark:ring-blue-500/20"
+                                }`}
                             >
                               {person.is_resident ? "Resident" : "Non-Resident"}
                             </span>
