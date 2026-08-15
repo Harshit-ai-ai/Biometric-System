@@ -99,6 +99,7 @@ def match_face(image_array: np.ndarray):
 
     return best_name, face_loc
 
+<<<<<<< HEAD
 def log_attendance(name: str, liveness_score: float = None, liveness_level: str = None):
     """Append an attendance entry and return it, so callers can confirm
     exactly what name/timestamp was persisted.
@@ -106,6 +107,11 @@ def log_attendance(name: str, liveness_score: float = None, liveness_level: str 
     liveness_score/liveness_level are optional: when present, they record
     which anti-spoof check (e.g. "temporal_motion" for the Level 1 landmark
     -motion check) confirmed this was a live face before logging."""
+=======
+def log_attendance(name: str):
+    """Append an attendance entry and return it, so callers can confirm
+    exactly what name/timestamp was persisted."""
+>>>>>>> 23dabe834c67990cb98aa994b5af7393507d14bc
     log = []
     if os.path.exists(ATTENDANCE_FILE):
         with open(ATTENDANCE_FILE, "rb") as f:
@@ -114,10 +120,13 @@ def log_attendance(name: str, liveness_score: float = None, liveness_level: str 
             except:
                 pass
     entry = {"name": name, "timestamp": datetime.datetime.now().isoformat()}
+<<<<<<< HEAD
     if liveness_score is not None:
         entry["liveness_score"] = liveness_score
     if liveness_level is not None:
         entry["liveness_level"] = liveness_level
+=======
+>>>>>>> 23dabe834c67990cb98aa994b5af7393507d14bc
     log.append(entry)
     with open(ATTENDANCE_FILE, "wb") as f:
         pickle.dump(log, f)

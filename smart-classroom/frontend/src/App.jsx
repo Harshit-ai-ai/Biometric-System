@@ -36,6 +36,7 @@ function getWsUrl(apiUrl) {
   }
 }
 
+<<<<<<< HEAD
 // ============================================================
 // LEVEL 1 LIVENESS — TEMPORAL MOTION
 // ============================================================
@@ -151,6 +152,8 @@ function pruneTemporalMotionHistory(historyRef, now, staleMs = 5000) {
   }
 }
 
+=======
+>>>>>>> 23dabe834c67990cb98aa994b5af7393507d14bc
 function App() {
   const API_URL = getApiUrl();
   const WS_URL = getWsUrl(API_URL);
@@ -191,6 +194,7 @@ function App() {
   // Cooldown to prevent duplicate attendance logs
   const lastLoggedRef = useRef({});
 
+<<<<<<< HEAD
   // --- Level 1 Liveness: Temporal Motion (see computeTemporalMotionScore) ---
   // Rolling ~1s buffer of normalized landmark snapshots, keyed by recognized
   // label. Used to tell a live face (blinks/micro-expressions cause small
@@ -202,6 +206,8 @@ function App() {
   // Throttle the "possible spoof" warning so it doesn't spam every frame
   const lastSpoofWarningRef = useRef({});
 
+=======
+>>>>>>> 23dabe834c67990cb98aa994b5af7393507d14bc
   const [cameraStatus, setCameraStatus] = useState("idle");
   const [cameraError, setCameraError] = useState("");
 
@@ -967,9 +973,12 @@ function App() {
       const known = knownDescriptorsRef.current;
       const now = Date.now();
       const COOLDOWN_MS = 10000; // log same person at most every 10 seconds
+<<<<<<< HEAD
       const SPOOF_WARNING_COOLDOWN_MS = 8000;
 
       const nextLivenessByLabel = {};
+=======
+>>>>>>> 23dabe834c67990cb98aa994b5af7393507d14bc
 
       for (const det of resized) {
         const { x, y, width, height } = det.detection.box;
@@ -983,6 +992,7 @@ function App() {
           if (result.label !== "unknown") {
             label = result.label;
             color = "#22c55e"; // green
+<<<<<<< HEAD
 
             // --- Level 1 Liveness: Temporal Motion ---
             // Track this person's landmarks over the last ~1s before we
@@ -1015,6 +1025,11 @@ function App() {
             ) {
               // Log attendance with cooldown — only once Level 1 liveness
               // has actually confirmed real landmark motion.
+=======
+            
+            // Log attendance with cooldown
+            if (!lastLoggedRef.current[label] || now - lastLoggedRef.current[label] > COOLDOWN_MS) {
+>>>>>>> 23dabe834c67990cb98aa994b5af7393507d14bc
               lastLoggedRef.current[label] = now;
               const ts = new Date().toISOString();
               const eventKey = `${label}-${ts}`;
@@ -1023,11 +1038,15 @@ function App() {
               // name + timestamp in the CSV export. We track whether this
               // actually succeeded (instead of silently swallowing errors)
               // so the UI can tell the user when a scan was NOT saved.
+<<<<<<< HEAD
               axios.post(`${API_URL}/log-attendance`, {
                 name: label,
                 liveness_score: liveness.score,
                 liveness_level: "temporal_motion",
               })
+=======
+              axios.post(`${API_URL}/log-attendance`, { name: label })
+>>>>>>> 23dabe834c67990cb98aa994b5af7393507d14bc
                 .then(() => {
                   setRecognizedEvents(prev => prev.map(ev =>
                     ev.key === eventKey ? { ...ev, synced: true } : ev
@@ -1055,6 +1074,7 @@ function App() {
         ctx.fillRect(x, y - textH, width, textH);
         ctx.fillStyle = "#ffffff";
         ctx.font = "bold 13px Inter, sans-serif";
+<<<<<<< HEAD
         const liveness = label !== "Unknown" ? nextLivenessByLabel[label] : null;
         const livenessTag =
           liveness?.state === "live" ? " \u2713 live" :
@@ -1066,6 +1086,11 @@ function App() {
       pruneTemporalMotionHistory(landmarkHistoryRef, now);
       setLivenessByLabel(nextLivenessByLabel);
 
+=======
+        ctx.fillText(label, x + 4, y - 5);
+      }
+
+>>>>>>> 23dabe834c67990cb98aa994b5af7393507d14bc
       if (resized.length > 0) {
         setRealtimeLabel(resized.map(d => {
           if (known.length === 0) return "Unknown";
