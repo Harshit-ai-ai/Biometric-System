@@ -17,7 +17,6 @@
 
 ### Spatial-Temporal Biometric Identity & Access Control Platform (v1.0)
 **Enterprise-Grade Residential Security System for Controlled Access Across Towers and Common Facilities**
-[Patent Claims](#patent-claims)
 **A computer-vision biometric access platform combining face/periocular recognition, image-quality restoration, liveness/anti-spoofing, resident authorization, visitor approval, spatial-temporal movement tracking, and auditable access logs.**
 
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
@@ -31,7 +30,6 @@
 
 ---
 
-<<<<<<< HEAD
 ## Architecture Overview
 
 This system introduces a continuous spatial-temporal methodology for strict physical attendance tracking in large-scale educational institutions (Universities, College Campuses). Built to scale to **10,000+ students**, we replace static snapshot-based facial recognition with a multi-layered, continuously accumulating presence engine that integrates ten distinct technical innovations into a single, edge-optimized pipeline.
