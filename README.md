@@ -17,7 +17,7 @@
 
 ### Spatial-Temporal Biometric Identity & Access Control Platform (v1.0)
 **Enterprise-Grade Residential Security System for Controlled Access Across Towers and Common Facilities**
-
+[Patent Claims](#patent-claims)
 **A computer-vision biometric access platform combining face/periocular recognition, image-quality restoration, liveness/anti-spoofing, resident authorization, visitor approval, spatial-temporal movement tracking, and auditable access logs.**
 
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
@@ -26,7 +26,6 @@
 [![SQLite](https://img.shields.io/badge/SQLite-4169E1?style=for-the-badge&logo=sqlite&logoColor=white)](https://sqlite.org/)
 
 [Architecture](#architecture-overview) | [Core Features](#core-features) | [Security](#biometric-security--anti-spoofing) | [Dashboard](#dashboard--reporting) | [API](#backend-api-architecture) | [Deployment](#production-deployment)
->>>>>>> 23dabe834c67990cb98aa994b5af7393507d14bc
 
 </div>
 
