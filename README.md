@@ -11,7 +11,7 @@
 [![React](https://img.shields.io/badge/React_Vite-6366f1?style=for-the-badge&logo=react)](https://reactjs.org/)
 [![SQLite](https://img.shields.io/badge/SQLite-4169E1?style=for-the-badge&logo=sqlite&logoColor=white)](https://sqlite.org/)
 
-[Architecture](#architecture-overview) | [10 Novel Modules](#the-10-novel-modules) | [Enterprise Dashboard](#enterprise-dashboard--reporting) | [API Documentation](#backend-api-architecture) | [Patent Claims](#patent-claims)
+[Architecture](#architecture-overview) | [Enterprise Dashboard](#enterprise-dashboard--reporting) | [API Documentation](#backend-api-architecture) 
 =======
 # BIOMETRIC ACCESS SYSTEM
 
