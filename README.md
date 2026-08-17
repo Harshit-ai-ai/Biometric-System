@@ -1,10 +1,8 @@
 <div align="center">
 
-<<<<<<< HEAD
 # CSTPE: Continuous Spatial-Temporal Presence Engine
 
-### Proprietary Smart Classroom Attendance Architecture (v2.0)
-**Enterprise-Grade University System Designed to Manage 10,000+ Students Concurrently**
+**Enterprise-Grade Biometric System Designed to Manage Housing Societies**
 
 **A 10-module patent-ready Computer Vision attendance system combining YOLOv8 liveness detection, multi-modal biometric fusion, zero-knowledge proofs, and blockchain-anchored audit trails.**
 
